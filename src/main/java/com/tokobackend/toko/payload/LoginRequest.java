@@ -1,4 +1,4 @@
-package com.tokobackend.toko.dto;
+package com.tokobackend.toko.payload;
 
 public class LoginRequest {
     private String username;

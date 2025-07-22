@@ -38,7 +38,7 @@ public class UserService {
         user.setAlamat(userDetails.getAlamat());
         user.setEmail(userDetails.getEmail());
         user.setPhNumber(userDetails.getPhNumber());
-        user.setRole(userDetails.getRole());
+        user.setRoles(userDetails.getRoles());
         return userRepository.save(user);
         }).orElseThrow(()-> new RuntimeException("User tidak ditemukan "+id));
     }

@@ -1,17 +1,22 @@
 package com.tokobackend.toko.controller;
 
-import com.tokobackend.toko.model.Order;
 import com.tokobackend.toko.model.Product;
+import com.tokobackend.toko.payload.request.ProductRequest;
 import com.tokobackend.toko.service.ProductService;
 import com.tokobackend.toko.service.CategoryService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
@@ -29,48 +34,68 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-  public ResponseEntity<Product> getProductById(@PathVariable Long id){
-
+    public ResponseEntity<Product> getProductById(@PathVariable Long id){
         return productService.getProductById(id).map(product -> new ResponseEntity<>(product, HttpStatus.OK)).orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     @PostMapping
-    public ResponseEntity<Product> createProduct(@RequestBody Product product){
-        if (product.getCategory()== null || product.getCategory().getId()== null)
-        {
-          return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
-        categoryService.getCategoryById(product.getCategory().getId()).ifPresentOrElse(product::setCategory, () ->{ throw new RuntimeException("Category tidak ditemukan" +product.getCategory().getId());});
+    @PreAuthorize("hasRole('ADMIN')")
+    // --- KOREKSI METODE createProduct DIMULAI ---
+    public ResponseEntity<?> createProduct( // Mengubah return type ke '?' untuk fleksibilitas pesan error
+                                            @Valid @RequestBody ProductRequest productRequest,
+                                            BindingResult bindingResult) {
 
-        Product savedProduct = productService.saveProduct(product);
-        return new ResponseEntity<>(savedProduct, HttpStatus.CREATED);
-    }
+        // Penanganan Validasi DTO
+        if (bindingResult.hasErrors()) {
+            Map<String, String> errors = new HashMap<>();
+            for (FieldError error : bindingResult.getFieldErrors()) {
+                errors.put(error.getField(), error.getDefaultMessage());
+            }
+            return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            // Memanggil service untuk menyimpan produk, meneruskan payload (ProductRequest)
+            Product savedProduct = productService.saveProduct(productRequest);
+            return new ResponseEntity<>(savedProduct, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            // Tangani error jika kategori tidak ditemukan atau masalah lain dari service
+            System.err.println("Error creating product: " + e.getMessage());
+            e.printStackTrace();
+            return new ResponseEntity<>("Failed to create product: " + e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+    } // --- KOREKSI METODE createProduct BERAKHIR ---
 
     @PutMapping("/{id}")
-    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @RequestBody Product productDetails) {
-        try {
-            // Handle category update if provided
-            if (productDetails.getCategory() != null && productDetails.getCategory().getId() != null) {
-                categoryService.getCategoryById(productDetails.getCategory().getId())
-                        .ifPresentOrElse(
-                                productDetails::setCategory,
-                                () -> { throw new RuntimeException("Category not found with id " + productDetails.getCategory().getId()); }
-                        );
-            } else {
-                // Jika category_id dihilangkan dari request, ambil category_id yang lama
-                // Atau putuskan apakah category_id bisa jadi null (sesuai skema NOT NULL)
-                // Untuk kasus ini, karena NOT NULL, harus ada di request update juga
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            }
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateProduct(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductRequest productRequest,
+            BindingResult bindingResult) {
 
-            Product updatedProduct = productService.updateProduct(id, productDetails);
+        // Penanganan Validasi DTO
+        if (bindingResult.hasErrors()) {
+            Map<String, String> errors = new HashMap<>();
+            for (FieldError error : bindingResult.getFieldErrors()) {
+                errors.put(error.getField(), error.getDefaultMessage());
+            }
+            return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            // Panggil service untuk update, meneruskan id dan ProductRequest
+            Product updatedProduct = productService.updateProduct(id, productRequest);
             return new ResponseEntity<>(updatedProduct, HttpStatus.OK);
         } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            // Tangani error jika produk atau kategori tidak ditemukan
+            System.err.println("Error updating product: " + e.getMessage());
+            e.printStackTrace();
+            return new ResponseEntity<>("Failed to update product: " + e.getMessage(), HttpStatus.NOT_FOUND);
         }
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);

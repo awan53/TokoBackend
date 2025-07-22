@@ -2,12 +2,20 @@ package com.tokobackend.toko.model;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+
+
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = "username"),
+                @UniqueConstraint(columnNames = "email")
+        })
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // IDENTITY untuk SQL Server (auto-increment)
@@ -34,8 +42,11 @@ public class User {
     @Column(name = "phone_number")
     private String PhNumber;
 
-    @Column(name = "role", nullable = false)
-    private String role;
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private Set<Role> roles = new HashSet<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Order> orders = new ArrayList<>();
@@ -49,7 +60,7 @@ public class User {
     public User(){
     }
 
-    public User(String nmUser, String username, LocalDate tanggalLahir, String alamat, String email, String password, String phoneNumber, String role) {
+    public User(String nmUser, String username, LocalDate tanggalLahir, String alamat, String email, String password, String phoneNumber) {
         this.nmUser = nmUser;
         this.username = username;
         this.tanggalLahir = tanggalLahir;
@@ -57,7 +68,7 @@ public class User {
         this.email = email;
         this.password = password;
         this.PhNumber =phoneNumber;
-        this.role = role;
+
     }
 
     public Long getId() {
@@ -124,12 +135,12 @@ public class User {
         PhNumber = phNumber;
     }
 
-    public String getRole() {
-        return role;
+    public Set<Role> getRoles() {
+        return roles;
     }
 
-    public void setRole(String role) {
-        this.role = role;
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles;
     }
 
     public List<Order> getOrders() {

@@ -1,11 +1,15 @@
 package com.tokobackend.toko.controller;
-import com.tokobackend.toko.dto.JwtResponse;
-import com.tokobackend.toko.dto.LoginRequest;
-import com.tokobackend.toko.dto.RegisterRequest;
+import com.tokobackend.toko.payload.JwtResponse;
+import com.tokobackend.toko.payload.LoginRequest;
+import com.tokobackend.toko.payload.RegisterRequest;
+import com.tokobackend.toko.payload.response.MessageRespone;
+
 import com.tokobackend.toko.model.User;
+import com.tokobackend.toko.model.Role; // Import model Role Anda
+import com.tokobackend.toko.model.ERole; // Import enum ERole Anda
 import com.tokobackend.toko.repository.UserRepository;
+import com.tokobackend.toko.repository.RoleRepository; // Import RoleRepository
 import com.tokobackend.toko.security.JwtUtils;
-import com.tokobackend.toko.service.UserDetailsServiceImpl; // Pastikan ini diimport
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -14,11 +18,16 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails; // Import UserDetails
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid; // Anda mungkin perlu menambahkan dependency validation jika belum ada
+import jakarta.validation.Valid;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600) // Mengizinkan CORS dari semua origin
 @RestController
@@ -31,77 +40,106 @@ public class AuthController {
     UserRepository userRepository;
 
     @Autowired
+    RoleRepository roleRepository; // <-- Telah ditambahkan Autowired
+
+    @Autowired
     PasswordEncoder passwordEncoder;
 
     @Autowired
     JwtUtils jwtUtils;
 
-    @Autowired
-    UserDetailsServiceImpl userDetailsService; // Opsional, bisa digunakan untuk memuat detail user setelah autentikasi
+    // userDetailsService tidak wajib di-autowire di sini jika hanya untuk memuat user details dari database
+    // selama UserDetailsServiceImpl Anda diimplementasikan dengan benar untuk security chain.
+    // @Autowired
+    // UserDetailsServiceImpl userDetailsService;
 
-    @PostMapping("/login")
+    // --- Endpoint untuk Login ---
+    @PostMapping("/signin") // URL /api/auth/signin
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
 
-        // Mengautentikasi user dengan username dan password yang diberikan
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
-        // Menempatkan objek autentikasi di SecurityContextHolder
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // Menghasilkan token JWT
         String jwt = jwtUtils.generateJwtToken(authentication);
 
-        // Mendapatkan UserDetails dari objek autentikasi
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        // Mengambil entitas User dari database untuk mendapatkan ID, Email, dan Role asli
         User user = userRepository.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("Error: User not found."));
+
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
+                .collect(Collectors.toList());
 
         // Mengembalikan JwtResponse dengan token dan detail user
         return ResponseEntity.ok(new JwtResponse(jwt,
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
-                user.getRole())); // Mengambil role dari entitas User
+                roles)); // <-- Gunakan variabel 'roles' (List<String>)
     }
 
-
-    @PostMapping("/register")
+    // --- Endpoint untuk Registrasi ---
+    @PostMapping("/register") // URL /api/auth/register
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
 
-        // Validasi apakah username sudah ada
-        // >>>>>> BARIS INI YANG HARUS DIUBAH <<<<<<
-        if (userRepository.existsByUsername(registerRequest.getUsername())) { // PASTIKAN ADA 's' di 'existsByUsername'
+        if (userRepository.existsByUsername(registerRequest.getUsername())) {
             return ResponseEntity
                     .badRequest()
-                    .body("Error: Username is already taken!");
+                    .body(new MessageRespone("Error: Username is already taken!")); // <-- Diperbaiki ke MessageResponse
         }
 
-        // Validasi apakah email sudah ada
-        if (userRepository.existsByEmail(registerRequest.getEmail())) { // Ini sudah benar
+        if (userRepository.existsByEmail(registerRequest.getEmail())) {
             return ResponseEntity
                     .badRequest()
-                    .body("Error: Email is already in use!");
+                    .body(new MessageRespone("Error: Email is already in use!")); // <-- Diperbaiki ke MessageResponse
         }
 
-        // Membuat objek User baru dengan semua field yang diperlukan oleh constructor di User.java
-        // Pastikan registerRequest memiliki semua data ini dan constructor User cocok
         User user = new User(
                 registerRequest.getNmUser(),
                 registerRequest.getUsername(),
-                registerRequest.getTanggalLahir(), // Akan null jika tidak diberikan di request (jika di DB nullable)
+                registerRequest.getTanggalLahir(),
                 registerRequest.getAlamat(),
                 registerRequest.getEmail(),
                 passwordEncoder.encode(registerRequest.getPassword()),
-                registerRequest.getPhNumber(),    // Akan null jika tidak diberikan di request (jika di DB nullable)
-                registerRequest.getRole() != null ? registerRequest.getRole() : "USER"
+                registerRequest.getPhNumber()
         );
 
-        // Simpan user ke database
+        Set<String> strRoles = registerRequest.getRoles();
+        Set<Role> roles = new HashSet<>();
+
+        if (strRoles == null || strRoles.isEmpty()) {
+            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                    .orElseThrow(() -> new RuntimeException("Error: Role USER is not found."));
+            roles.add(userRole);
+        } else {
+            strRoles.forEach(role -> {
+                switch (role) {
+                    case "admin":
+                        Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
+                                .orElseThrow(() -> new RuntimeException("Error: Role ADMIN is not found."));
+                        roles.add(adminRole);
+                        break;
+                    case "mod":
+                        Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR) // <-- PERBAIKAN PENTING DI SINI
+                                .orElseThrow(() -> new RuntimeException("Error: Role MODERATOR is not found."));
+                        roles.add(modRole);
+                        break;
+                    case "user":
+                    default:
+                        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                                .orElseThrow(() -> new RuntimeException("Error: Role USER is not found."));
+                        roles.add(userRole);
+                }
+            });
+        }
+
+        user.setRoles(roles);
+
         userRepository.save(user);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully!");
+        return ResponseEntity.status(HttpStatus.CREATED).body(new MessageRespone("User registered successfully!")); // <-- Diperbaiki ke MessageResponse
     }
 }

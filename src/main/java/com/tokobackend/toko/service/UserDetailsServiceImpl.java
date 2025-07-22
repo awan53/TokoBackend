@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class UserDetailsServiceImpl implements  UserDetailsService  {
@@ -23,13 +24,9 @@ public class UserDetailsServiceImpl implements  UserDetailsService  {
                 .orElseThrow(() -> new UsernameNotFoundException("User Not Found with username: " + username));
 
         // Buat daftar GrantedAuthority dari role user
-        List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
+       List<GrantedAuthority> authorities = user.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getName().name())).collect(Collectors.toList());
 
         // Return UserDetails yang dibangun dari user kita
-        return new org.springframework.security.core.userdetails.User(
-                user.getUsername(),
-                user.getPassword(), // Password yang sudah di-encoded
-                authorities
-        );
+        return  new org.springframework.security.core.userdetails.User(user.getUsername(),user.getPassword(), authorities);
     }
 }

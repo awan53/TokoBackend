@@ -1,4 +1,6 @@
-package com.tokobackend.toko.dto;
+package com.tokobackend.toko.payload;
+
+import java.util.List;
 
 public class JwtResponse {
 
@@ -7,9 +9,9 @@ public class JwtResponse {
     private Long id;
     private String username;
     private String email;
-    private String role;
+    private List<String> role;
 
-    public JwtResponse(String accessToken, Long id, String username, String email, String role){
+    public JwtResponse(String accessToken, Long id, String username, String email, List<String> role){
         this.token = accessToken;
         this.id = id;
         this.username = username;
@@ -57,11 +59,11 @@ public class JwtResponse {
         this.email = email;
     }
 
-    public String getRole() {
+    public List<String> getRole() {
         return role;
     }
 
-    public void setRole(String role) {
+    public void setRole(List<String> role) {
         this.role = role;
     }
 }

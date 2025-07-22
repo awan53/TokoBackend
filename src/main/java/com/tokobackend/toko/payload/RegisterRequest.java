@@ -1,13 +1,25 @@
-package com.tokobackend.toko.dto;
+package com.tokobackend.toko.payload;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.Set;
+import java.util.Set;
 
 
 public class RegisterRequest {
+    @NotBlank
     private String username;
+    @NotBlank
+    @Size(min = 3, max = 20)
     private String password;
+    @NotBlank
+    @Size(max = 50)
+    @Email
     private String email;
-    private String role;
+    private Set<String> roles;
     private String nmUser; // Sesuai dengan nm_user di model User
     private LocalDate tanggalLahir; // Sesuai dengan tanggal_lahir di model User
     private String alamat;   // Sesuai dengan alamat di model User
@@ -17,11 +29,11 @@ public class RegisterRequest {
     public RegisterRequest() {
     }
 
-    public RegisterRequest(String username, String password, String email, String role, String nmUser, LocalDate tanggalLahir, String alamat, String phNumber) {
+    public RegisterRequest(String username, String password, String email, Set<String> roles, String nmUser, LocalDate tanggalLahir, String alamat, String phNumber) {
         this.username = username;
         this.password = password;
         this.email = email;
-        this.role = role;
+        this.roles = roles;
         this.nmUser = nmUser;
         this.tanggalLahir = tanggalLahir;
         this.alamat = alamat;
@@ -52,12 +64,12 @@ public class RegisterRequest {
         this.email = email;
     }
 
-    public String getRole() {
-        return role;
+    public Set<String> getRoles() {
+        return roles;
     }
 
-    public void setRole(String role) {
-        this.role = role;
+    public void setRoles(Set<String> roles) {
+        this.roles = roles;
     }
 
     public String getNmUser() {
