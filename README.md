@@ -1,4 +1,4 @@
-# 🛒 Backend Aplikasi Toko (Spring Boot)
+# 🛒 Backend Aplikasi Toko (Spring Boot) on going
 
 Ini adalah **proyek backend-only** untuk aplikasi toko sederhana. Backend ini dibangun menggunakan **Spring Boot** dan saat ini belum memiliki frontend. Cocok digunakan sebagai dasar pengembangan sistem e-commerce atau manajemen inventaris.
 
