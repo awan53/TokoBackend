@@ -6,8 +6,10 @@ import com.tokobackend.toko.repository.CategoryRepository; // <<< TAMBAHKAN INI 
 import com.tokobackend.toko.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +32,51 @@ public class ProductService {
         return productRepository.findById(id);
     }
 
+      // --- METODE saveProduct dan updateProduct (yang sudah kita revisi) ---
+
+    @Transactional
+    public Product saveProduct(ProductRequest productRequest) {
+        Category category = categoryRepository.findById(productRequest.getCategoryId())
+                .orElseThrow(() -> new RuntimeException("Category not found with ID: " + productRequest.getCategoryId()));
+
+        Product product = new Product();
+        product.setName(productRequest.getName());
+        product.setDescription(productRequest.getDescription());
+        product.setPrice(productRequest.getPrice());
+        product.setStock(productRequest.getStock());
+
+        product.setImgUrl(productRequest.getImageUrl());
+        product.setCategory(category);
+        product.setCreatedAt(LocalDateTime.now());
+        product.setUpdatedAt(LocalDateTime.now());
+
+        return productRepository.save(product);
+    }
+
+    @Transactional
+    public Product updateProduct(Long id, ProductRequest productRequest) {
+        return productRepository.findById(id).map(existingProduct -> {
+            existingProduct.setName(productRequest.getName());
+            existingProduct.setDescription(productRequest.getDescription());
+            existingProduct.setPrice(productRequest.getPrice());
+            existingProduct.setStock(productRequest.getStock());
+            // PASTIKAN method setImageUrl() ada di Product.java
+            existingProduct.setImgUrl(productRequest.getImageUrl());
+
+            if (productRequest.getCategoryId() != null) {
+                Category newCategory = categoryRepository.findById(productRequest.getCategoryId())
+                        .orElseThrow(() -> new RuntimeException("Category not found with ID: " + productRequest.getCategoryId()));
+                existingProduct.setCategory(newCategory);
+            } else {
+                throw new RuntimeException("Category ID cannot be null for product update.");
+            }
+
+            return productRepository.save(existingProduct);
+        }).orElseThrow(() -> new RuntimeException("Product not found with ID: " + id));
+    }
+
+
+    @Transactional
     public void deleteProduct(Long id) {
         if (!productRepository.existsById(id)) {
             throw new RuntimeException("Product not found with ID: " + id);
@@ -52,43 +99,19 @@ public class ProductService {
         return productRepository.findByPriceBetween(minPrice, maxPrice);
     }
 
-    // --- METODE saveProduct dan updateProduct (yang sudah kita revisi) ---
+    @Transactional
+    public void decreaseProductStock(Long productId, Integer quantity){
+        Product product = productRepository.findById(productId).orElseThrow(()-> new RuntimeException("Product not Found with Id : "+productId));
 
-    public Product saveProduct(ProductRequest productRequest) {
-        Category category = categoryRepository.findById(productRequest.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found with ID: " + productRequest.getCategoryId()));
-
-        Product product = new Product();
-        product.setName(productRequest.getName());
-        product.setDescription(productRequest.getDescription());
-        product.setPrice(productRequest.getPrice());
-        product.setStock(productRequest.getStock());
-        // PASTIKAN method setImageUrl() ada di Product.java
-        product.setImgUrl(productRequest.getImageUrl());
-        product.setCategory(category);
-
-        return productRepository.save(product);
+        if (product.getStock() < quantity){
+            throw new RuntimeException("Stok tidak mencukupi untuk product : " +product.getName()+ ".Stok tersedia : " +product.getStock());
+        }
+        product.setStock(product.getStock() - quantity);
+        productRepository.save(product);
     }
 
-    public Product updateProduct(Long id, ProductRequest productRequest) {
-        return productRepository.findById(id).map(existingProduct -> {
-            existingProduct.setName(productRequest.getName());
-            existingProduct.setDescription(productRequest.getDescription());
-            existingProduct.setPrice(productRequest.getPrice());
-            existingProduct.setStock(productRequest.getStock());
-            // PASTIKAN method setImageUrl() ada di Product.java
-            existingProduct.setImgUrl(productRequest.getImageUrl());
 
-            if (productRequest.getCategoryId() != null) {
-                Category newCategory = categoryRepository.findById(productRequest.getCategoryId())
-                        .orElseThrow(() -> new RuntimeException("Category not found with ID: " + productRequest.getCategoryId()));
-                existingProduct.setCategory(newCategory);
-            } else {
-                throw new RuntimeException("Category ID cannot be null for product update.");
-            }
 
-            return productRepository.save(existingProduct);
-        }).orElseThrow(() -> new RuntimeException("Product not found with ID: " + id));
-    }
+
 
 }

@@ -31,7 +31,7 @@ public class Order {
     private BigDecimal totalAmount;
 
     @Column(name = "status", nullable = false, length = 50)
-    private String status = "Pending";
+    private String status;
 
     @Column(name = "shipping_address", columnDefinition = "TEXT", nullable = false)
     private String shippingAddress;
@@ -47,10 +47,19 @@ public class Order {
 
     public Order(User user, BigDecimal totalAmount, String status, String shippingAddress, String paymentMethod) {
         this.user = user;
-        this.totalAmount = totalAmount;
-        this.status = status;
+        this.totalAmount = BigDecimal.ZERO;
+        this.status = "PENDING";
         this.shippingAddress = shippingAddress;
         this.paymentMethod = paymentMethod;
+    }
+
+    public Order(User user) {
+        this.user = user;
+        this.orderDate = LocalDateTime.now(); // Set tanggal pesanan saat dibuat
+        this.status = "PENDING";             // Status default
+        this.totalAmount = BigDecimal.ZERO;  // Total awal (akan dihitung ulang di service)
+        this.shippingAddress = "Default Address"; // Atau bisa null jika kolom ini nullable
+        this.paymentMethod = "Unspecified";   // Atau bisa null jika kolom ini nullable
     }
 
     public Long getId() {

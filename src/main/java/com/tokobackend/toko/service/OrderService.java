@@ -4,10 +4,15 @@ import com.tokobackend.toko.model.Order;
 import com.tokobackend.toko.model.OrderItem;
 import com.tokobackend.toko.model.User;
 import com.tokobackend.toko.model.Product;
+import com.tokobackend.toko.payload.request.OrderItemRequest;
+import com.tokobackend.toko.payload.request.OrderRequest;
+import com.tokobackend.toko.repository.OrderItemRepository;
 import com.tokobackend.toko.repository.OrderRepository;
 import com.tokobackend.toko.repository.UserRepository;
 import com.tokobackend.toko.repository.ProductRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +23,15 @@ import java.util.Optional;
 
 @Service
 public class OrderService {
+
     @Autowired
     private OrderRepository orderRepository;
     @Autowired
+    private OrderItemRepository orderItemRepository;
+    @Autowired
     private UserRepository userRepository;
     @Autowired
-    private ProductRepository productRepository; // Diperlukan untuk cek stok & harga
+    private ProductService productService;
 
     public List<Order> getAllOrders() {
         return orderRepository.findAll();
@@ -33,42 +41,46 @@ public class OrderService {
         return orderRepository.findById(id);
     }
 
-    @Transactional // Pastikan operasi ini bersifat transaksional
-    public Order createOrder(Order orderDetails) {
-        // Pastikan user ada
-        User user = userRepository.findById(orderDetails.getUser().getId())
-                .orElseThrow(() -> new RuntimeException("User not found with id " + orderDetails.getUser().getId()));
-        orderDetails.setUser(user);
+    @Transactional // Pastikan seluruh proses pemesanan berjalan dalam satu transaksi
+    public Order createOrder(OrderRequest orderRequest) {
+      Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+      String username = authentication.getName();
 
-        // Hitung total_amount dan validasi stok untuk setiap item
-        BigDecimal calculatedTotalAmount = BigDecimal.ZERO;
-        for (OrderItem item : orderDetails.getOrderItems()) {
-            Product product = productRepository.findById(item.getProduct().getId())
-                    .orElseThrow(() -> new RuntimeException("Product not found with id " + item.getProduct().getId()));
+      User currentUser = userRepository.findByUsername(username).orElseThrow(()-> new RuntimeException("user tidak ditemukan "+username));
 
-            if (product.getStock() < item.getQuantity()) {
-                throw new RuntimeException("Not enough stock for product: " + product.getName());
+        Order order = new Order(currentUser);
+        BigDecimal totalAmount = BigDecimal.ZERO;
+
+        // 3. Proses setiap item dalam pesanan
+        for (OrderItemRequest itemRequest : orderRequest.getItems()) {
+            // Dapatkan produk melalui ProductService
+            Product product = productService.getProductById(itemRequest.getProductId())
+                    .orElseThrow(() -> new RuntimeException("Produk tidak ditemukan dengan ID: " + itemRequest.getProductId()));
+
+            // Periksa stok
+            if (product.getStock() < itemRequest.getQuantity()) {
+                throw new RuntimeException("Stok tidak mencukupi untuk produk: " + product.getName() + ". Stok tersedia: " + product.getStock());
             }
 
-            // Set harga produk saat order dibuat (penting untuk histori)
-            item.setPriceAtOrder(product.getPrice());
-            calculatedTotalAmount = calculatedTotalAmount.add(product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+            // Buat OrderItem
+            OrderItem orderItem = new OrderItem(order, product, itemRequest.getQuantity(), product.getPrice());
+            order.addOrderItem(orderItem); // Tambahkan item ke daftar orderItems di objek Order
 
-            // Kurangi stok produk
-            product.setStock(product.getStock() - item.getQuantity());
-            productRepository.save(product); // Simpan perubahan stok
+            // Hitung subtotal untuk item ini dan tambahkan ke total pesanan
+            BigDecimal itemSubtotal = product.getPrice().multiply(BigDecimal.valueOf(itemRequest.getQuantity()));
+            totalAmount = totalAmount.add(itemSubtotal);
 
-            // Atur relasi bidirectional
-            item.setOrder(orderDetails);
-            item.setProduct(product);
+            // Kurangi stok produk melalui ProductService
+            productService.decreaseProductStock(product.getId(), itemRequest.getQuantity());
         }
 
-        // Set total amount dari perhitungan server, bukan dari input user
-        orderDetails.setTotalAmount(calculatedTotalAmount);
-        orderDetails.setStatus("PENDING"); // Pastikan status awal PENDING
+        order.setTotalAmount(totalAmount);
+        order.setStatus("COMPLETED"); // Atau "PENDING" jika ada proses pembayaran lebih lanjut
 
-        return orderRepository.save(orderDetails);
+        // 4. Simpan Order (ini juga akan menyimpan OrderItem karena CascadeType.ALL pada Order entity)
+        return orderRepository.save(order);
     }
+
 
     public void deleteOrder(Long id) {
         // Anda mungkin ingin mengembalikan stok produk sebelum menghapus order
